@@ -1,0 +1,42 @@
+# Source files
+src/
+test/
+
+# Configuration files
+.vscode/
+.github/
+.eslintrc
+eslint.config.js
+nodemon.json
+tsconfig.json
+
+# Development files
+*.map
+*.ts
+!*.d.ts
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# OS
+.DS_Store
+
+# Homebridge development
+accessories/
+persist/
+config/
+config.example.json
+
+# IDE
+.vscode
+.idea
+
+# Claude AI
+.claude/
+
