@@ -1,0 +1,61 @@
+{
+  "bridge": {
+    "name": "Homebridge",
+    "username": "CC:22:3D:E3:CE:30",
+    "port": 51826,
+    "pin": "031-45-154"
+  },
+  "description": "Example configuration for Homebridge Notify Webhooks plugin",
+  "platforms": [
+    {
+      "platform": "NotifyWebhooks",
+      "name": "My Notifications",
+      "webhooks": [
+        {
+          "_comment": "Basic notification to a single device",
+          "name": "Front Door Motion",
+          "token": "YOUR_API_TOKEN_HERE",
+          "id": "YOUR_DEVICE_ID",
+          "text": "Motion detected at the front door!"
+        },
+        {
+          "_comment": "Notification with title and custom icon",
+          "name": "Garage Door Alert",
+          "token": "YOUR_API_TOKEN_HERE",
+          "id": "YOUR_DEVICE_ID",
+          "text": "The garage door has been opened",
+          "title": "🚗 Garage Alert",
+          "iconURL": "https://notifyicons.pingie.com/your-icon.png"
+        },
+        {
+          "_comment": "Group notification - sends to all devices in group (note GRP prefix)",
+          "name": "Security Alert",
+          "token": "YOUR_API_TOKEN_HERE",
+          "id": "GRPFAMILY",
+          "groupType": "all",
+          "text": "Security system has been triggered!",
+          "title": "⚠️ SECURITY ALERT"
+        },
+        {
+          "_comment": "Simple reminder notification",
+          "name": "Bedtime Reminder",
+          "token": "YOUR_API_TOKEN_HERE",
+          "id": "bedroom_device",
+          "text": "It's 10 PM - Time to get ready for bed",
+          "title": "🛏️ Bedtime"
+        },
+        {
+          "_comment": "Weather alert to any available device in group (note GRP prefix)",
+          "name": "Weather Warning",
+          "token": "YOUR_API_TOKEN_HERE",
+          "id": "GRPHOUSEHOLD",
+          "groupType": "any",
+          "text": "Severe weather warning in your area",
+          "title": "⛈️ Weather Alert",
+          "iconURL": "https://notifyicons.pingie.com/weather-warning.png"
+        }
+      ]
+    }
+  ],
+  "accessories": []
+}

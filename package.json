@@ -1,0 +1,52 @@
+{
+  "name": "homebridge-notify-alerts",
+  "version": "1.0.0",
+  "displayName": "Notify Webhooks",
+  "description": "A HomeBridge plugin that sends notifications via Notify API webhooks using switches",
+  "main": "dist/index.js",
+  "scripts": {
+    "clean": "rimraf ./dist",
+    "build": "npm run clean && tsc",
+    "prepublishOnly": "npm run build",
+    "watch": "npm run build && npm link && nodemon"
+  },
+  "keywords": [
+    "homebridge-plugin",
+    "homebridge",
+    "notify",
+    "webhook",
+    "notification"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/simplytoast1/homebridge-notify-alerts.git"
+  },
+  "bugs": {
+    "url": "https://github.com/simplytoast1/homebridge-notify-alerts/issues"
+  },
+  "engines": {
+    "node": "^18.17.0 || ^20.9.0 || ^22.0.0 || ^23.0.0",
+    "homebridge": "^1.6.0"
+  },
+  "dependencies": {
+    "@homebridge/plugin-ui-utils": "^1.0.0",
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "homebridge": "^1.7.0",
+    "nodemon": "^3.0.1",
+    "rimraf": "^5.0.0",
+    "typescript": "^5.3.0"
+  },
+  "nodemonConfig": {
+    "watch": [
+      "src"
+    ],
+    "ext": "ts",
+    "ignore": [],
+    "exec": "tsc && homebridge -D -I -U ./"
+  }
+}
