@@ -1,6 +1,6 @@
 {
   "name": "homebridge-notify-alerts",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "displayName": "Notify Alerts",
   "description": "A HomeBridge plugin that sends notifications via Notify API webhooks using switches",
   "main": "dist/index.js",
@@ -26,8 +26,9 @@
   "bugs": {
     "url": "https://github.com/simplytoast1/homebridge-notify-alerts/issues"
   },
+  "homepage": "https://notify.pingie.com",
   "engines": {
-    "node": "^18.17.0 || ^20.9.0 || ^22.0.0 || ^23.0.0",
+    "node": "^18.17.0 || ^20.9.0 || ^22.0.0 || ^23.0.0 || ^24.0.0",
     "homebridge": "^1.6.0"
   },
   "dependencies": {

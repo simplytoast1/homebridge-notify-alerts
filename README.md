@@ -58,7 +58,7 @@ Add the following to your `config.json` file:
   "platforms": [
     {
       "platform": "NotifyWebhooks",
-      "name": "Notify Webhooks",
+      "name": "Notify Alerts",
       "webhooks": [
         {
           "name": "Front Door Alert",
@@ -79,7 +79,7 @@ Add the following to your `config.json` file:
   "platforms": [
     {
       "platform": "NotifyWebhooks",
-      "name": "Notify Webhooks",
+      "name": "Notify Alerts",
       "webhooks": [
         {
           "name": "Front Door Alert",

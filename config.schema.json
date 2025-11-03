@@ -12,14 +12,12 @@
       "name": {
         "title": "Platform Name",
         "type": "string",
-        "default": "Notify Webhooks",
-        "required": false,
+        "default": "Notify Alerts",
         "description": "The name that will appear in your Homebridge log."
       },
       "webhooks": {
         "title": "Webhooks",
         "type": "array",
-        "required": true,
         "items": {
           "title": "Webhook",
           "type": "object",
@@ -27,49 +25,44 @@
             "name": {
               "title": "Webhook Name",
               "type": "string",
-              "required": true,
               "description": "The name of the switch as it will appear in HomeKit."
             },
             "token": {
               "title": "Token",
               "type": "string",
-              "required": true,
               "description": "Your Notify API token."
             },
             "text": {
               "title": "Message Text",
               "type": "string",
-              "required": true,
               "description": "The notification message to send."
             },
             "id": {
               "title": "ID",
               "type": "string",
-              "required": true,
               "description": "Device ID or Group ID. Groups have 'GRP' prefix and are auto-detected by the API."
             },
             "title": {
               "title": "Notification Title",
               "type": "string",
-              "required": false,
               "description": "Optional title for the notification."
             },
             "groupType": {
               "title": "Group Type",
               "type": "string",
-              "required": false,
               "description": "Optional threading identifier for notification grouping (free-form text, e.g., 'all', 'any', 'security', 'doorbell')"
             },
             "iconURL": {
               "title": "Icon URL",
               "type": "string",
-              "required": false,
               "description": "Optional URL to an icon for the notification. Visit https://notifyicons.pingie.com/ for icon hosting."
             }
-          }
+          },
+          "required": ["name", "token", "text", "id"]
         }
       }
-    }
+    },
+    "required": ["webhooks"]
   },
   "layout": [
     {
