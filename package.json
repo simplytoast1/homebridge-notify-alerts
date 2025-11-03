@@ -1,7 +1,7 @@
 {
   "name": "homebridge-notify-alerts",
   "version": "1.0.0",
-  "displayName": "Notify Webhooks",
+  "displayName": "Notify Alerts",
   "description": "A HomeBridge plugin that sends notifications via Notify API webhooks using switches",
   "main": "dist/index.js",
   "scripts": {
