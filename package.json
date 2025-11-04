@@ -28,8 +28,8 @@
   },
   "homepage": "https://notify.pingie.com",
   "engines": {
-    "node": "^18.17.0 || ^20.9.0 || ^22.0.0 || ^23.0.0 || ^24.0.0",
-    "homebridge": "^1.6.0"
+    "homebridge": ">=1.8.0 || >=2.0.0",
+    "node": ">=20.0"
   },
   "dependencies": {
     "@homebridge/plugin-ui-utils": "^1.0.0",
