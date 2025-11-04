@@ -63,7 +63,7 @@ Add the following to your `config.json` file:
         {
           "name": "Front Door Alert",
           "token": "YOUR_API_TOKEN",
-          "deviceId": "YOUR_DEVICE_ID",
+          "id": "YOUR_DEVICE_ID",
           "text": "Someone is at the front door!"
         }
       ]
@@ -84,7 +84,7 @@ Add the following to your `config.json` file:
         {
           "name": "Front Door Alert",
           "token": "YOUR_API_TOKEN",
-          "deviceId": "device123",
+          "id": "device123",
           "text": "Motion detected at front door",
           "title": "Security Alert",
           "iconURL": "https://example.com/door-icon.png"
@@ -92,7 +92,7 @@ Add the following to your `config.json` file:
         {
           "name": "Garage Open",
           "token": "YOUR_API_TOKEN",
-          "groupId": "family",
+          "id": "GRPfamily",
           "text": "The garage door has been opened",
           "title": "Garage Alert",
           "groupType": "all"
@@ -100,7 +100,7 @@ Add the following to your `config.json` file:
         {
           "name": "Bedtime Reminder",
           "token": "YOUR_API_TOKEN",
-          "deviceId": "bedroom_display",
+          "id": "bedroom_display",
           "text": "It's time for bed!",
           "title": "⏰ Bedtime"
         }
@@ -114,8 +114,8 @@ Add the following to your `config.json` file:
 ## Getting Your Notify Credentials
 
 1. **API Token**: Get your API token from your Notify account settings
-2. **Device ID**: Find device IDs in your Notify devices list
-3. **Group ID**: Create and manage groups in your Notify dashboard
+2. **Device ID**: Find device IDs in your Notify devices list (use in the `id` field)
+3. **Group ID**: Create and manage groups in your Notify dashboard (groups have 'GRP' prefix, e.g., `GRPfamily`)
 
 ## Icon Hosting
 
@@ -148,7 +148,7 @@ Create powerful automations in the Home app:
 
 1. Check your Homebridge logs for errors
 2. Verify your configuration has valid JSON syntax
-3. Ensure either `deviceId` or `groupId` is specified
+3. Ensure the `id` field is specified with a valid device or group ID
 4. Restart Homebridge after configuration changes
 
 ### Notifications not sending
