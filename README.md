@@ -1,14 +1,10 @@
 # Homebridge Notify Alerts
 
-[![verified-by-homebridge](https://badgen.net/badge/homebridge/verified/purple)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins)
-[![npm](https://badgen.net/npm/v/homebridge-notify-alerts)](https://www.npmjs.com/package/homebridge-notify-alerts)
-[![npm downloads](https://badgen.net/npm/dt/homebridge-notify-alerts)](https://www.npmjs.com/package/homebridge-notify-alerts)
-
-A Homebridge plugin that creates HomeKit switches to send notifications through the [Notify API](https://notify.pingie.com/apidocs/). Each webhook appears as a switch that automatically turns off after being activated, making it perfect for automation triggers and quick notifications.
+A Homebridge plugin that creates HomeKit contact sensors to send notifications through the [Notify API](https://notify.pingie.com/apidocs/). Each webhook appears as a contact sensor that automatically closes after being opened, making it perfect for automation triggers and quick notifications.
 
 ## Features
 
-- 🔄 **Auto-Off Switches**: Switches automatically turn off 1 second after activation
+- 🔄 **Auto-Close Sensors**: Contact sensors automatically close 1 second after being opened
 - 📱 **Device & Group Support**: Send notifications to individual devices or groups
 - 🎨 **Custom Icons**: Support for custom notification icons
 - 🔧 **Easy Configuration**: Simple setup through Homebridge Config UI
@@ -129,22 +125,22 @@ Create powerful automations in the Home app:
 
 1. **Motion Detection Alert**
    - Trigger: Motion sensor detects motion
-   - Action: Turn on "Front Door Alert" switch
+   - Action: Open "Front Door Alert" contact sensor
    - Result: Notification sent to your device
 
 2. **Bedtime Scene**
    - Create a "Bedtime" scene
-   - Include the "Bedtime Reminder" switch
+   - Include opening the "Bedtime Reminder" sensor
    - Notifications sent when scene activates
 
 3. **Security System**
    - Trigger: Door opens when nobody's home
-   - Action: Turn on multiple notification switches
+   - Action: Open multiple notification sensors
    - Result: Alert all family members
 
 ## Troubleshooting
 
-### Switch doesn't appear in HomeKit
+### Contact sensor doesn't appear in HomeKit
 
 1. Check your Homebridge logs for errors
 2. Verify your configuration has valid JSON syntax
@@ -158,9 +154,9 @@ Create powerful automations in the Home app:
 3. Look for error messages in Homebridge logs
 4. Test your API credentials using the built in testing tool
 
-### Switch doesn't turn off automatically
+### Sensor doesn't close automatically
 
-This is normal behavior - the switch will turn off 1 second after being activated. If it's not turning off, check your Homebridge logs for errors.
+This is normal behavior - the contact sensor will close 1 second after being opened. If it's not closing, check your Homebridge logs for errors.
 
 ## Support
 
