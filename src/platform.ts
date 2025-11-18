@@ -18,12 +18,12 @@ import { NotifyWebhookAccessory } from './webhookAccessory';
  * This interface ensures type safety and documents what fields are available
  * for each webhook that the user configures.
  *
- * Each webhook will create one HomeKit contact sensor accessory that can trigger
- * a notification through the Notify API when "opened".
+ * Each webhook will create one HomeKit switch accessory that can trigger
+ * a notification through the Notify API when turned on.
  *
  * CONFIGURATION EXAMPLE:
  * {
- *   "name": "Front Door Alert",           // Required: HomeKit contact sensor name
+ *   "name": "Front Door Alert",           // Required: HomeKit switch name
  *   "id": "ABC12345",                     // Required: Device ID
  *   "token": "XYZ789TOKEN",                // Required: API token
  *   "text": "Motion at front door!",      // Required: Notification text
@@ -44,7 +44,7 @@ import { NotifyWebhookAccessory } from './webhookAccessory';
 export interface WebhookConfig {
   // REQUIRED FIELDS - These must be present for the webhook to work
 
-  name: string;          // Display name for the HomeKit contact sensor
+  name: string;          // Display name for the HomeKit switch
                         // Shows in Home app, used for Siri commands
                         // Example: "Front Door Alert", "Garage Open"
 

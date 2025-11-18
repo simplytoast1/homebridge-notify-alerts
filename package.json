@@ -1,8 +1,8 @@
 {
   "name": "homebridge-notify-alerts",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "displayName": "Notify Alerts",
-  "description": "A HomeBridge plugin that sends notifications via Notify API webhooks using contact sensors",
+  "description": "A HomeBridge plugin that sends notifications via Notify API webhooks using switches",
   "main": "dist/index.js",
   "scripts": {
     "clean": "rimraf ./dist",

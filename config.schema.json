@@ -4,7 +4,7 @@
   "singular": true,
   "customUi": true,
   "recommendChildBridge": true,
-  "headerDisplay": "This plugin allows you to send notifications through Notify API using HomeKit contact sensors. Each webhook appears as a contact sensor that automatically closes after being opened. Running as a child bridge is recommended for better stability.",
+  "headerDisplay": "This plugin allows you to send notifications through Notify API using HomeKit switches. Each webhook appears as a switch that automatically turns off after being turned on. Running as a child bridge is recommended for better stability.",
   "footerDisplay": "Need help with icon hosting? Visit [https://notifyicons.pingie.com/](https://notifyicons.pingie.com/)",
   "schema": {
     "type": "object",
@@ -25,7 +25,7 @@
             "name": {
               "title": "Webhook Name",
               "type": "string",
-              "description": "The name of the contact sensor as it will appear in HomeKit."
+              "description": "The name of the switch as it will appear in HomeKit."
             },
             "token": {
               "title": "Token",

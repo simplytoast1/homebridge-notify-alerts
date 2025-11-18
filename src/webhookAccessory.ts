@@ -5,48 +5,51 @@ import { NotifyWebhookPlatform, WebhookConfig } from './platform';
 /**
  * NotifyWebhookAccessory Class
  *
- * This class manages individual webhook contact sensors in HomeKit.
+ * This class manages individual webhook switches in HomeKit.
  * Each webhook configuration creates one instance of this class.
  *
- * WHAT IS A CONTACT SENSOR?
- * Contact sensors in HomeKit are typically used for door/window sensors that detect
- * open/closed states. However, we're repurposing them for notifications because:
- * - They have two states: CONTACT_DETECTED (0) = closed, CONTACT_NOT_DETECTED (1) = open
- * - When "opened", they can trigger HomeKit automations
- * - They provide visual feedback in the Home app
+ * WHAT IS A SWITCH IN HOMEKIT?
+ * A switch is a controllable accessory that can be turned on or off by users.
+ * Switches are perfect for notifications because:
+ * - They have two states: ON (true) and OFF (false)
+ * - Users can control them via Home app, Siri, or automations
+ * - They're intuitive: "Turn on [switch name]" to send notification
+ * - They provide visual feedback when activated
  * - They work great as momentary triggers for notifications
  *
  * KEY FEATURES:
- * - Appears as a contact sensor in HomeKit (shows as "open" or "closed")
- * - When manually set to "open", it triggers a notification
- * - Automatically returns to "closed" state after 1 second
- * - Sends notifications via Notify API when opened
- * - Always ready to trigger again due to auto-close behavior
+ * - Appears as a switch in HomeKit (shows as on/off)
+ * - When turned on, it triggers a notification
+ * - Automatically turns off after 1 second
+ * - Sends notifications via Notify API when turned on
+ * - Always ready to trigger again due to auto-off behavior
  *
  * HOW IT WORKS:
- * 1. User opens the contact sensor (via Home app, Siri, or automation)
- * 2. Plugin detects the "open" state change
+ * 1. User turns on the switch (via Home app, Siri, or automation)
+ * 2. Plugin detects the "on" state change
  * 3. Notification is sent via Notify API
- * 4. After 1 second, sensor automatically returns to "closed"
+ * 4. After 1 second, switch automatically turns off
  * 5. Ready for next trigger
  *
- * AUTOMATION EXAMPLE:
- * "When motion is detected, open the 'Front Door Alert' sensor"
- * This sends a notification when someone approaches your door.
+ * AUTOMATION EXAMPLES:
+ * - "When motion is detected, turn on 'Front Door Alert'"
+ * - "When garage door opens, turn on 'Security Alert'"
+ * - "At 10 PM, turn on 'Bedtime Reminder'"
  *
- * WHY CONTACT SENSOR INSTEAD OF SWITCH?
- * - More semantic: "opening" feels more like triggering an alert
- * - Visual distinction: Contact sensors look different in Home app
- * - Better for security/alert scenarios where "open" = alert triggered
- * - Can be used in automations that specifically watch for "opened" events
+ * WHY SWITCHES FOR NOTIFICATIONS?
+ * - User controllable: Can be turned on manually or via automations
+ * - Intuitive: Everyone understands "turn on" means "do something"
+ * - Visual feedback: Users see the switch turn on then off
+ * - Siri integration: "Hey Siri, turn on [notification name]"
+ * - Scene compatible: Can include switches in HomeKit scenes
  */
 export class NotifyWebhookAccessory {
   /**
    * Service Reference
    *
-   * This holds the HomeKit ContactSensor service for this accessory.
-   * The service is what defines the type of accessory (contact sensor)
-   * and provides the characteristics (state) that HomeKit can interact with.
+   * This holds the HomeKit Switch service for this accessory.
+   * The service is what defines the type of accessory (switch)
+   * and provides the characteristics (On/Off state) that HomeKit can interact with.
    */
   private service: Service;
 
@@ -67,10 +70,10 @@ export class NotifyWebhookAccessory {
    * CONSTRUCTOR FLOW:
    * 1. Extract webhook configuration from accessory context
    * 2. Set up AccessoryInformation (manufacturer, model, serial number)
-   * 3. Get or create ContactSensor service
-   * 4. Set the sensor name
-   * 5. Register event handlers for state changes
-   * 6. Initialize sensor to "closed" state
+   * 3. Get or create Switch service
+   * 4. Set the switch name
+   * 5. Register event handlers for on/off state changes
+   * 6. Initialize switch to "off" state
    *
    * @param platform - Reference to the platform for accessing Homebridge API
    * @param accessory - The PlatformAccessory representing this webhook
@@ -104,16 +107,16 @@ export class NotifyWebhookAccessory {
      */
     this.accessory.getService(this.platform.Service.AccessoryInformation)!
       .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Notify')              // Company name
-      .setCharacteristic(this.platform.Characteristic.Model, 'Webhook Contact Sensor')     // Model description
+      .setCharacteristic(this.platform.Characteristic.Model, 'Webhook Switch')             // Model description
       .setCharacteristic(this.platform.Characteristic.SerialNumber, this.webhookConfig.name);  // Unique ID
 
     /**
-     * STEP 3: Get or Create ContactSensor Service
+     * STEP 3: Get or Create Switch Service
      *
-     * The ContactSensor service makes this accessory appear as a contact sensor in HomeKit.
-     * Contact sensors have a ContactSensorState characteristic with two possible values:
-     * - CONTACT_DETECTED (0): Sensor is closed/contact made (our default state)
-     * - CONTACT_NOT_DETECTED (1): Sensor is open/no contact (triggers notification)
+     * The Switch service makes this accessory appear as a switch in HomeKit.
+     * Switches have an On characteristic with two possible values:
+     * - false (0): Switch is off (our default/resting state)
+     * - true (1): Switch is on (triggers notification, then auto-turns off)
      *
      * WHY CHECK FOR EXISTING SERVICE?
      * If this accessory was cached from a previous Homebridge run, it might
@@ -123,148 +126,156 @@ export class NotifyWebhookAccessory {
      * - Scene memberships
      * - Automation triggers
      * - Favorite status
+     * - Customized names and icons
      *
      * The || (OR) operator means: "Try to get existing service, or create new one if not found"
      *
-     * ContactSensor documentation: https://developers.homebridge.io/#/service/ContactSensor
+     * Switch service documentation: https://developers.homebridge.io/#/service/Switch
      */
-    this.service = this.accessory.getService(this.platform.Service.ContactSensor)
-      || this.accessory.addService(this.platform.Service.ContactSensor);
+    this.service = this.accessory.getService(this.platform.Service.Switch)
+      || this.accessory.addService(this.platform.Service.Switch);
 
     /**
-     * STEP 4: Set the Sensor Name
+     * STEP 4: Set the Switch Name
      *
      * This is the primary display name shown in the Home app.
      * Users can rename it later in the Home app, but this is the default.
-     * The name also affects Siri commands: "Hey Siri, is [name] open?"
+     * The name also affects Siri commands: "Hey Siri, turn on [name]"
      */
     this.service.setCharacteristic(this.platform.Characteristic.Name, this.webhookConfig.name);
 
     /**
      * STEP 5: Register Event Handlers
      *
-     * The ContactSensor service has one main characteristic: ContactSensorState
+     * The Switch service has one main characteristic: On (boolean)
      * This characteristic can have two values:
-     * - 0 (CONTACT_DETECTED): Closed state - contact made
-     * - 1 (CONTACT_NOT_DETECTED): Open state - no contact detected
+     * - false: Switch is off (default state)
+     * - true: Switch is on (active state, triggers notification)
      *
      * We need to handle two types of events:
-     * - onGet: HomeKit asking for the current state of the sensor
-     * - onSet: Not typically used for sensors, but we implement it for manual triggers
+     * - onGet: HomeKit asking for the current state of the switch
+     * - onSet: User/automation changing the switch state
      *
      * IMPORTANT: We use .bind(this) to ensure 'this' refers to our class instance
      * inside the handler methods. Without .bind(this), 'this' would be undefined.
      *
      * EVENT FLOW:
-     * 1. User/automation triggers sensor to "open" state
-     * 2. onSet handler is called with new state value
-     * 3. If opening (value = 1), we send notification
-     * 4. After 1 second, we automatically return to "closed" (value = 0)
-     * 5. onGet handler always returns "closed" to show sensor is ready
+     * 1. User/automation turns on the switch
+     * 2. onSet handler is called with value = true
+     * 3. We send the notification
+     * 4. After 1 second, we automatically turn switch back off
+     * 5. onGet handler always returns false to show switch is ready
      */
-    this.service.getCharacteristic(this.platform.Characteristic.ContactSensorState)
-      .onGet(this.getContactState.bind(this))     // Handle state queries
-      .onSet(this.setContactState.bind(this));    // Handle manual state changes
+    this.service.getCharacteristic(this.platform.Characteristic.On)
+      .onGet(this.getOn.bind(this))     // Handle state queries
+      .onSet(this.setOn.bind(this));    // Handle state changes
 
     /**
-     * STEP 6: Initialize Sensor State
+     * STEP 6: Initialize Switch State
      *
-     * Start with the sensor in the CLOSED position (CONTACT_DETECTED = 0).
+     * Start with the switch in the OFF position (false).
      * This ensures:
      * - Consistent starting state on Homebridge restart
      * - No accidental notifications on startup
-     * - Sensor appears "ready" and "normal" in Home app
-     * - Prevents confusion from sensor showing "open" when nothing happened
+     * - Switch appears "ready" and "normal" in Home app
+     * - Prevents confusion from switch showing "on" when nothing happened
      *
-     * CONTACT_DETECTED = 0 means the sensor is closed (default/normal state)
+     * false = switch is off (default/normal state)
      */
     this.service.updateCharacteristic(
-      this.platform.Characteristic.ContactSensorState,
-      this.platform.Characteristic.ContactSensorState.CONTACT_DETECTED, // 0 = closed
+      this.platform.Characteristic.On,
+      false, // Start in off state
     );
   }
 
   /**
-   * Get Contact Sensor State Handler
+   * Get Switch State Handler
    *
-   * Called when HomeKit needs to know the current state of the contact sensor.
+   * Called when HomeKit needs to know the current state of the switch.
    * This happens when:
    * - The Home app is opened and refreshes accessory states
-   * - Siri is asked about the sensor state ("Hey Siri, is [sensor] open?")
-   * - Automations check conditions ("When [sensor] is closed...")
+   * - Siri is asked about the switch state ("Hey Siri, is [switch] on?")
+   * - Automations check conditions ("When [switch] is off...")
    * - HomeKit syncs state between devices (iPhone, iPad, Apple Watch, etc.)
-   * - Another accessory's automation depends on this sensor's state
+   * - Another accessory's automation depends on this switch's state
    *
-   * CONTACT SENSOR STATES:
-   * - CONTACT_DETECTED (0): Sensor is closed/normal state
-   * - CONTACT_NOT_DETECTED (1): Sensor is open/triggered state
+   * SWITCH STATES:
+   * - false (0): Switch is off/normal state
+   * - true (1): Switch is on/triggered state
    *
-   * WHY ALWAYS RETURN CLOSED?
-   * Since our sensor auto-closes after triggering, we always report CONTACT_DETECTED (closed).
+   * WHY ALWAYS RETURN OFF?
+   * Since our switch auto-turns off after triggering, we always report false (off).
    * This ensures:
-   * - The sensor appears "ready" in the Home app
+   * - The switch appears "ready" in the Home app
    * - Users can immediately trigger it again
-   * - The UI shows the sensor in its normal/resting state
-   * - Automations that watch for "opened" events can fire again
+   * - The UI shows the switch in its normal/resting state
+   * - Automations that watch for "turned on" events can fire again
+   * - The switch doesn't look "stuck" in the on position
    *
-   * The actual "opening" happens in setContactState when triggered,
-   * but it only lasts 1 second before auto-closing.
+   * The actual "on" state happens in setOn when triggered,
+   * but it only lasts 1 second before auto-turning off.
    *
-   * @returns Promise<CharacteristicValue> - Always returns CONTACT_DETECTED (0 = closed state)
+   * @returns Promise<CharacteristicValue> - Always returns false (off state)
    */
-  async getContactState(): Promise<CharacteristicValue> {
-    // Always report CONTACT_DETECTED (closed) state since the sensor auto-closes
+  async getOn(): Promise<CharacteristicValue> {
+    // Always report OFF (false) state since the switch auto-turns off
     // This makes it always ready for the next trigger
-    // 0 = CONTACT_DETECTED = closed/normal state
-    return this.platform.Characteristic.ContactSensorState.CONTACT_DETECTED;
+    // false = off/normal state
+    return false;
   }
 
   /**
-   * Set Contact Sensor State Handler
+   * Set Switch State Handler
    *
-   * Called when the contact sensor state changes (either manually or via automation).
+   * Called when the switch state changes (by user, Siri, or automation).
    * This is the main action handler that triggers notifications.
    *
-   * CONTACT SENSOR STATE VALUES:
-   * - CONTACT_DETECTED (0): Sensor closed - normal/resting state
-   * - CONTACT_NOT_DETECTED (1): Sensor opened - triggered state (sends notification)
+   * SWITCH STATE VALUES:
+   * - false (0): Switch off - normal/resting state
+   * - true (1): Switch on - triggered state (sends notification)
    *
    * TRIGGER FLOW:
-   * 1. User/automation opens the sensor (sets to CONTACT_NOT_DETECTED)
-   * 2. This handler is called with value = 1 (opened)
+   * 1. User/automation turns on the switch
+   * 2. This handler is called with value = true (on)
    * 3. Log the trigger event for debugging
    * 4. Send notification via Notify API
    * 5. Log success or failure
-   * 6. After 1 second, automatically close the sensor (return to CONTACT_DETECTED)
+   * 6. After 1 second, automatically turn off the switch
    *
-   * WHY AUTO-CLOSE?
-   * The auto-close behavior is crucial for making these sensors useful:
-   * - Sensors are always ready to trigger again
-   * - No need to manually "reset" the sensor
-   * - Works perfectly with automations that watch for "opened" events
-   * - Visual feedback: users see the sensor open briefly, then close
-   * - Prevents stuck "open" state that would be confusing
+   * WHY AUTO-OFF?
+   * The auto-off behavior is crucial for making these switches useful:
+   * - Switches are always ready to trigger again
+   * - No need to manually "reset" the switch
+   * - Works perfectly with automations that watch for "turned on" events
+   * - Visual feedback: users see the switch turn on briefly, then off
+   * - Prevents stuck "on" state that would be confusing
+   * - Makes the switch feel like a "button" rather than a toggle
    *
    * AUTOMATION EXAMPLES:
-   * "When motion is detected, open the Front Door Alert sensor"
-   * "When garage door opens, open the Security Alert sensor"
-   * "At 10 PM, open the Bedtime Reminder sensor"
+   * "When motion is detected, turn on the Front Door Alert"
+   * "When garage door opens, turn on the Security Alert"
+   * "At 10 PM, turn on the Bedtime Reminder"
    *
-   * @param value - The new state (0 = closed/CONTACT_DETECTED, 1 = opened/CONTACT_NOT_DETECTED)
+   * SIRI EXAMPLES:
+   * "Hey Siri, turn on Front Door Alert"
+   * "Hey Siri, trigger Security Alert"
+   *
+   * @param value - The new state (false = off, true = on)
    */
-  async setContactState(value: CharacteristicValue) {
+  async setOn(value: CharacteristicValue) {
     /**
      * TRIGGER DETECTION
      *
-     * We only take action when the sensor is opened (CONTACT_NOT_DETECTED = 1).
-     * If the sensor is being closed (CONTACT_DETECTED = 0), we ignore it because:
-     * - Closing is handled automatically by our timer
-     * - Manual close commands would be redundant
-     * - We don't want to send notifications on close
+     * We only take action when the switch is turned ON (value = true).
+     * If the switch is being turned OFF (value = false), we ignore it because:
+     * - Turning off is handled automatically by our timer
+     * - Manual off commands would be redundant
+     * - We don't want to send notifications when turning off
+     * - Prevents double-processing and confusion
      *
-     * The check: if (value === CONTACT_NOT_DETECTED) means "if sensor is opened"
+     * The check: if (value) means "if value is truthy" which for booleans means true
      */
-    if (value === this.platform.Characteristic.ContactSensorState.CONTACT_NOT_DETECTED) {
+    if (value) {
       /**
        * STEP 1: Log the Trigger
        *
@@ -273,9 +284,10 @@ export class NotifyWebhookAccessory {
        * - Confirm automations are working
        * - Troubleshoot issues
        * - Monitor when notifications are sent
-       * - Track sensor activity in logs
+       * - Track switch activity in logs
+       * - Debug timing issues
        */
-      this.platform.log.info(`Contact sensor opened, triggering webhook: ${this.webhookConfig.name}`);
+      this.platform.log.info(`Switch turned on, triggering webhook: ${this.webhookConfig.name}`);
 
       try {
         /**
@@ -285,11 +297,12 @@ export class NotifyWebhookAccessory {
          * This is wrapped in try-catch to handle any errors gracefully.
          *
          * Possible errors:
-         * - Network connectivity issues
-         * - Invalid API token
-         * - Invalid device/group ID
-         * - API rate limiting
-         * - Notify service downtime
+         * - Network connectivity issues (no internet)
+         * - Invalid API token (wrong or expired token)
+         * - Invalid device/group ID (device doesn't exist)
+         * - API rate limiting (too many requests)
+         * - Notify service downtime (API unavailable)
+         * - Timeout (request takes too long)
          */
         await this.sendNotification();
 
@@ -306,10 +319,11 @@ export class NotifyWebhookAccessory {
          *
          * If notification sending fails, we log the error but DON'T throw it.
          * Why not throw?
-         * - Throwing would cause HomeKit to show an error to the user
-         * - The sensor would appear "unresponsive" in the Home app
+         * - Throwing would cause HomeKit to show "No Response" error to user
+         * - The switch would appear "unresponsive" in the Home app
          * - Partial failures would break automations
-         * - Better to log the error and let the sensor continue functioning
+         * - Better to log the error and let the switch continue functioning
+         * - User can check Homebridge logs to diagnose the issue
          *
          * Users can check the Homebridge log to see what went wrong.
          */
@@ -317,47 +331,50 @@ export class NotifyWebhookAccessory {
       }
 
       /**
-       * STEP 5: Auto-Close Timer
+       * STEP 5: Auto-Off Timer
        *
-       * After 1 second (1000ms), automatically close the sensor.
-       * This transitions the sensor back to CONTACT_DETECTED (closed) state.
+       * After 1 second (1000ms), automatically turn off the switch.
+       * This transitions the switch back to OFF (false) state.
        *
        * WHY 1 SECOND?
-       * - Long enough: Users see visual feedback in Home app (sensor opens/closes)
+       * - Long enough: Users see visual feedback in Home app (switch turns on/off)
        * - Short enough: Not annoying, doesn't interfere with rapid triggers
        * - Prevents accidents: Can't accidentally trigger twice immediately
        * - Good UX: Clear indication that something happened
+       * - Gives time for notification to be sent
        *
        * TECHNICAL DETAILS:
        * - setTimeout is non-blocking, so HomeKit doesn't wait
-       * - The sensor appears to "pulse" open then close
+       * - The switch appears to "pulse" on then off
        * - updateCharacteristic sends the state change to HomeKit
-       * - This triggers UI updates on all connected devices
+       * - This triggers UI updates on all connected devices (iPhone, iPad, etc.)
+       * - The 1 second delay is client-side, API call happens immediately
        *
        * NOTE: We use setTimeout instead of setInterval because we only want
-       * one automatic close, not repeated closing.
+       * one automatic off, not repeated toggling.
        */
       setTimeout(() => {
-        // Update the sensor state back to closed (CONTACT_DETECTED = 0)
+        // Update the switch state back to off (false)
         this.service.updateCharacteristic(
-          this.platform.Characteristic.ContactSensorState,
-          this.platform.Characteristic.ContactSensorState.CONTACT_DETECTED, // 0 = closed
+          this.platform.Characteristic.On,
+          false, // Turn off
         );
 
-        // Log the auto-close for debugging
+        // Log the auto-off for debugging
         // This only appears if Homebridge is running in debug mode (-D flag)
-        this.platform.log.debug(`Auto-closed contact sensor: ${this.webhookConfig.name}`);
+        this.platform.log.debug(`Auto-turned off switch: ${this.webhookConfig.name}`);
       }, 1000); // 1000 milliseconds = 1 second
     }
     /**
-     * ELSE CASE: Sensor Being Closed
+     * ELSE CASE: Switch Being Turned Off
      *
-     * If value === CONTACT_DETECTED (0), the sensor is being closed.
+     * If value === false, the switch is being turned off.
      * We do nothing in this case because:
-     * - Our auto-close timer already handles this
-     * - Manual close commands are redundant
-     * - We don't want to send notifications when closing
+     * - Our auto-off timer already handles this
+     * - Manual off commands are redundant
+     * - We don't want to send notifications when turning off
      * - Simplifies the logic and prevents double-processing
+     * - Prevents potential infinite loops
      */
   }
 

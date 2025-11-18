@@ -1,10 +1,10 @@
 # Homebridge Notify Alerts
 
-A Homebridge plugin that creates HomeKit contact sensors to send notifications through the [Notify API](https://notify.pingie.com/apidocs/). Each webhook appears as a contact sensor that automatically closes after being opened, making it perfect for automation triggers and quick notifications.
+A Homebridge plugin that creates HomeKit switches to send notifications through the [Notify API](https://notify.pingie.com/apidocs/). Each webhook appears as a switch that automatically turns off after being activated, making it perfect for automation triggers and quick notifications.
 
 ## Features
 
-- 🔄 **Auto-Close Sensors**: Contact sensors automatically close 1 second after being opened
+- 🔄 **Auto-Off Switches**: Switches automatically turn off 1 second after activation
 - 📱 **Device & Group Support**: Send notifications to individual devices or groups
 - 🎨 **Custom Icons**: Support for custom notification icons
 - 🔧 **Easy Configuration**: Simple setup through Homebridge Config UI
@@ -125,22 +125,22 @@ Create powerful automations in the Home app:
 
 1. **Motion Detection Alert**
    - Trigger: Motion sensor detects motion
-   - Action: Open "Front Door Alert" contact sensor
+   - Action: Turn on "Front Door Alert" switch
    - Result: Notification sent to your device
 
 2. **Bedtime Scene**
    - Create a "Bedtime" scene
-   - Include opening the "Bedtime Reminder" sensor
+   - Include the "Bedtime Reminder" switch
    - Notifications sent when scene activates
 
 3. **Security System**
    - Trigger: Door opens when nobody's home
-   - Action: Open multiple notification sensors
+   - Action: Turn on multiple notification switches
    - Result: Alert all family members
 
 ## Troubleshooting
 
-### Contact sensor doesn't appear in HomeKit
+### Switch doesn't appear in HomeKit
 
 1. Check your Homebridge logs for errors
 2. Verify your configuration has valid JSON syntax
@@ -154,9 +154,9 @@ Create powerful automations in the Home app:
 3. Look for error messages in Homebridge logs
 4. Test your API credentials using the built in testing tool
 
-### Sensor doesn't close automatically
+### Switch doesn't turn off automatically
 
-This is normal behavior - the contact sensor will close 1 second after being opened. If it's not closing, check your Homebridge logs for errors.
+This is normal behavior - the switch will turn off 1 second after being activated. If it's not turning off, check your Homebridge logs for errors.
 
 ## Support
 
