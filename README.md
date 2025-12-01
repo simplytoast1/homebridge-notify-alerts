@@ -1,5 +1,7 @@
 # Homebridge Notify Alerts
 
+[![verified-by-homebridge](https://img.shields.io/badge/homebridge-verified-blueviolet?color=%23491F59&style=flat&logoColor=%23FFFFFF&logo=homebridge)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins)
+
 A Homebridge plugin that creates HomeKit switches to send notifications through the [Notify API](https://notify.pingie.com/apidocs/). Each webhook appears as a switch that automatically turns off after being activated, making it perfect for automation triggers and quick notifications.
 
 ## Features
