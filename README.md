@@ -179,5 +179,13 @@ This project is licensed under the Apache-2.0 License - see the LICENSE file for
 
 ## Changelog
 
+### Version 1.1.0
+- Duplicate webhook names are now detected and skipped with a clear error instead of silently overwriting each other
+- Switches for webhooks that were removed or renamed in the config are now unregistered from HomeKit automatically. Leftover ghost switches from earlier versions are cleaned up on the first restart after updating
+- Switches now reset exactly 1 second after activation, and notifications are sent without blocking HomeKit, so the accessory no longer appears unresponsive on slow networks
+- Failed notification requests no longer log the API token
+- The settings UI now handles quotes and special characters in saved values correctly
+- Webhook tests in the settings UI now time out after 10 seconds instead of hanging
+
 ### Version 1.0.0
 - Initial release

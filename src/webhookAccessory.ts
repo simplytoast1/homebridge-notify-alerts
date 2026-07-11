@@ -238,9 +238,9 @@ export class NotifyWebhookAccessory {
    * 1. User/automation turns on the switch
    * 2. This handler is called with value = true (on)
    * 3. Log the trigger event for debugging
-   * 4. Send notification via Notify API
-   * 5. Log success or failure
-   * 6. After 1 second, automatically turn off the switch
+   * 4. Schedule the auto-off timer (1 second)
+   * 5. Send notification via Notify API in the background
+   * 6. Log success or failure when the request completes
    *
    * WHY AUTO-OFF?
    * The auto-off behavior is crucial for making these switches useful:
@@ -289,69 +289,17 @@ export class NotifyWebhookAccessory {
        */
       this.platform.log.info(`Switch turned on, triggering webhook: ${this.webhookConfig.name}`);
 
-      try {
-        /**
-         * STEP 2: Send Notification
-         *
-         * Call the sendNotification method which handles the API request.
-         * This is wrapped in try-catch to handle any errors gracefully.
-         *
-         * Possible errors:
-         * - Network connectivity issues (no internet)
-         * - Invalid API token (wrong or expired token)
-         * - Invalid device/group ID (device doesn't exist)
-         * - API rate limiting (too many requests)
-         * - Notify service downtime (API unavailable)
-         * - Timeout (request takes too long)
-         */
-        await this.sendNotification();
-
-        /**
-         * STEP 3: Log Success
-         *
-         * Confirmation that the notification was sent successfully.
-         * This appears in the Homebridge log for user feedback.
-         */
-        this.platform.log.info(`Successfully sent notification for: ${this.webhookConfig.name}`);
-      } catch (error) {
-        /**
-         * STEP 4: Error Handling
-         *
-         * If notification sending fails, we log the error but DON'T throw it.
-         * Why not throw?
-         * - Throwing would cause HomeKit to show "No Response" error to user
-         * - The switch would appear "unresponsive" in the Home app
-         * - Partial failures would break automations
-         * - Better to log the error and let the switch continue functioning
-         * - User can check Homebridge logs to diagnose the issue
-         *
-         * Users can check the Homebridge log to see what went wrong.
-         */
-        this.platform.log.error(`Failed to send notification for ${this.webhookConfig.name}:`, error);
-      }
-
       /**
-       * STEP 5: Auto-Off Timer
+       * STEP 2: Auto-Off Timer
        *
        * After 1 second (1000ms), automatically turn off the switch.
-       * This transitions the switch back to OFF (false) state.
+       * This is scheduled BEFORE the API call so the switch always resets
+       * 1 second after activation, even if the request is slow.
        *
        * WHY 1 SECOND?
        * - Long enough: Users see visual feedback in Home app (switch turns on/off)
        * - Short enough: Not annoying, doesn't interfere with rapid triggers
-       * - Prevents accidents: Can't accidentally trigger twice immediately
        * - Good UX: Clear indication that something happened
-       * - Gives time for notification to be sent
-       *
-       * TECHNICAL DETAILS:
-       * - setTimeout is non-blocking, so HomeKit doesn't wait
-       * - The switch appears to "pulse" on then off
-       * - updateCharacteristic sends the state change to HomeKit
-       * - This triggers UI updates on all connected devices (iPhone, iPad, etc.)
-       * - The 1 second delay is client-side, API call happens immediately
-       *
-       * NOTE: We use setTimeout instead of setInterval because we only want
-       * one automatic off, not repeated toggling.
        */
       setTimeout(() => {
         // Update the switch state back to off (false)
@@ -364,6 +312,35 @@ export class NotifyWebhookAccessory {
         // This only appears if Homebridge is running in debug mode (-D flag)
         this.platform.log.debug(`Auto-turned off switch: ${this.webhookConfig.name}`);
       }, 1000); // 1000 milliseconds = 1 second
+
+      /**
+       * STEP 3: Send Notification (in the background)
+       *
+       * The request is deliberately NOT awaited. HomeKit expects set
+       * handlers to return quickly; holding this handler open for the
+       * duration of the HTTP request (up to the 10 second timeout)
+       * triggers HAP slow-response warnings and can make the accessory
+       * appear unresponsive in the Home app. Errors are logged rather
+       * than thrown for the same reason: throwing would surface a
+       * "No Response" error to the user and break automations.
+       *
+       * Possible errors:
+       * - Network connectivity issues (no internet)
+       * - Invalid API token (wrong or expired token)
+       * - Invalid device/group ID (device doesn't exist)
+       * - API rate limiting (too many requests)
+       * - Notify service downtime (API unavailable)
+       * - Timeout (request takes too long)
+       */
+      this.sendNotification()
+        .then(() => {
+          this.platform.log.info(`Successfully sent notification for: ${this.webhookConfig.name}`);
+        })
+        .catch((error) => {
+          this.platform.log.error(
+            `Failed to send notification for ${this.webhookConfig.name}: ${this.describeError(error)}`,
+          );
+        });
     }
     /**
      * ELSE CASE: Switch Being Turned Off
@@ -376,6 +353,26 @@ export class NotifyWebhookAccessory {
      * - Simplifies the logic and prevents double-processing
      * - Prevents potential infinite loops
      */
+  }
+
+  /**
+   * Build a Safe, Human-Readable Error Message
+   *
+   * IMPORTANT: Never log the raw axios error object. It embeds the full
+   * request config, including the token query parameter, so logging it
+   * directly would leak the user's API token into the Homebridge log.
+   * This extracts only the useful, non-sensitive parts.
+   *
+   * @param error - The error thrown by sendNotification
+   * @returns A concise message with status code and API response details
+   */
+  private describeError(error: unknown): string {
+    if (axios.isAxiosError(error)) {
+      const status = error.response ? `HTTP ${error.response.status}` : (error.code || 'network error');
+      const detail = error.response?.data ? ` - ${JSON.stringify(error.response.data)}` : '';
+      return `${status}: ${error.message}${detail}`;
+    }
+    return error instanceof Error ? error.message : String(error);
   }
 
   /**

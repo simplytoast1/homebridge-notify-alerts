@@ -244,6 +244,17 @@ class NotifyWebhooksUiServer extends HomebridgePluginUiServer {
         });
       });
 
+      /**
+       * Abort the request if the API does not respond within 10 seconds,
+       * matching the timeout the plugin itself uses. Without this, a hung
+       * connection would leave the UI's "Testing webhook..." spinner
+       * running forever. destroy() triggers the 'error' handler below,
+       * which rejects the promise with this message.
+       */
+      req.setTimeout(10000, () => {
+        req.destroy(new Error('Request timed out after 10 seconds'));
+      });
+
       req.on('error', (error) => {
         reject(error);
       });

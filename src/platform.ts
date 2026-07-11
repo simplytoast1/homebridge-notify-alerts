@@ -222,6 +222,19 @@ export class NotifyWebhookPlatform implements DynamicPlatformPlugin {
       return;  // Nothing to do if no webhooks configured
     }
 
+    /**
+     * Track the UUIDs processed during this run.
+     *
+     * Used for two things:
+     * 1. Detecting duplicate webhook names. The UUID is derived from the
+     *    name, so two webhooks with the same name would collide on the
+     *    same accessory and silently overwrite each other.
+     * 2. Finding cached accessories whose webhook was removed or renamed
+     *    in the config, so they can be unregistered instead of lingering
+     *    in HomeKit as dead switches.
+     */
+    const processedUuids = new Set<string>();
+
     // Process each webhook configuration
     for (const webhook of this.config.webhooks) {
       /**
@@ -313,6 +326,21 @@ export class NotifyWebhookPlatform implements DynamicPlatformPlugin {
       const uuid = this.api.hap.uuid.generate(webhook.name);
 
       /**
+       * Duplicate Name Check
+       *
+       * Two webhooks with the same name would map to the same UUID and
+       * therefore the same accessory. The second one would overwrite the
+       * first's configuration and handler, silently breaking it. Skip
+       * duplicates and tell the user how to fix it.
+       */
+      if (processedUuids.has(uuid)) {
+        this.log.error(`Duplicate webhook name "${webhook.name}" - skipping this entry`);
+        this.log.error('Each webhook needs a unique name to appear as its own switch');
+        continue;
+      }
+      processedUuids.add(uuid);
+
+      /**
        * Check for Existing Accessory
        *
        * Look through our cached accessories (loaded in configureAccessory)
@@ -366,11 +394,31 @@ export class NotifyWebhookPlatform implements DynamicPlatformPlugin {
       }
     }
 
-    // Note: We're not handling accessory removal here.
-    // If a webhook is removed from config, its accessory will remain cached.
-    // To properly handle removal, you would need to:
-    // 1. Track which accessories were processed
-    // 2. Find accessories that weren't in the current config
-    // 3. Call api.unregisterPlatformAccessories() for those
+    /**
+     * Stale Accessory Cleanup
+     *
+     * Any cached accessory whose UUID was not processed above belongs to
+     * a webhook that was removed or renamed in the config. Unregister
+     * those so they do not remain in HomeKit as switches that do nothing.
+     */
+    const staleAccessories = this.accessories.filter(
+      accessory => !processedUuids.has(accessory.UUID),
+    );
+
+    if (staleAccessories.length > 0) {
+      for (const accessory of staleAccessories) {
+        this.log.info('Removing accessory no longer in config:', accessory.displayName);
+      }
+
+      this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, staleAccessories);
+
+      // Keep our local cache in sync with what is actually registered
+      for (const accessory of staleAccessories) {
+        const index = this.accessories.indexOf(accessory);
+        if (index !== -1) {
+          this.accessories.splice(index, 1);
+        }
+      }
+    }
   }
 }
