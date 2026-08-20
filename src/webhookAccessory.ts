@@ -1,6 +1,22 @@
 import { Service, PlatformAccessory, CharacteristicValue } from 'homebridge';
 import axios from 'axios';
 import { NotifyWebhookPlatform, WebhookConfig } from './platform';
+import { NOTIFY_API_BASE_URL } from './settings';
+
+/**
+ * NotifyPayload - JSON body sent to POST /notify-json/{id}
+ *
+ * Field names are case-sensitive and must match the API exactly.
+ * Only 'text' is required.
+ */
+interface NotifyPayload {
+  text: string;
+  title?: string;
+  groupType?: string;
+  iconUrl?: string;
+  imageUrl?: string;
+  timeSensitive?: boolean;
+}
 
 /**
  * NotifyWebhookAccessory Class
@@ -162,9 +178,10 @@ export class NotifyWebhookAccessory {
      * EVENT FLOW:
      * 1. User/automation turns on the switch
      * 2. onSet handler is called with value = true
-     * 3. We send the notification
-     * 4. After 1 second, we automatically turn switch back off
-     * 5. onGet handler always returns false to show switch is ready
+     * 3. The auto-off timer is scheduled, then the notification is sent
+     *    in the background so the handler returns immediately
+     * 4. After 1 second the switch turns itself back off
+     * 5. onGet always returns false to show the switch is ready
      */
     this.service.getCharacteristic(this.platform.Characteristic.On)
       .onGet(this.getOn.bind(this))     // Handle state queries
@@ -333,7 +350,16 @@ export class NotifyWebhookAccessory {
        * - Timeout (request takes too long)
        */
       this.sendNotification()
-        .then(() => {
+        .then((result) => {
+          /**
+           * A group send with failures already logged a warning inside
+           * sendNotification. Claiming success as well would contradict it,
+           * so the success line is only written when nothing failed.
+           */
+          if (result && typeof result.failureCount === 'number' && result.failureCount > 0) {
+            return;
+          }
+
           this.platform.log.info(`Successfully sent notification for: ${this.webhookConfig.name}`);
         })
         .catch((error) => {
@@ -378,208 +404,179 @@ export class NotifyWebhookAccessory {
   /**
    * Send Notification via Notify API
    *
-   * This method handles the actual API communication with Notify.
-   * It builds the request using the unified /notify-json/{id} endpoint
-   * which auto-detects device vs group based on ID prefix.
+   * Posts to the unified /notify-json/{id} endpoint, which auto-detects
+   * whether the ID is a device or a group based on the "GRP" prefix.
    *
-   * API Documentation: https://notify.pingie.com/apidocs/
+   * API documentation: https://getnotifyapp.com/apidocs/
    *
-   * IMPORTANT API EXAMPLES FOR REFERENCE:
-   *
-   * Example 1: Device Notification
-   * POST https://notifypush.pingie.com/notify-json/ABC12345?token=XYZ789TOKEN123
+   * Example request:
+   * POST https://push.getnotifyapp.com/notify-json/ABC12345?token=XYZ789TOKEN123
    * Content-Type: application/json
    * {
-   *   "text": "Server CPU at 95%! 🔥",
+   *   "text": "Server CPU at 95%!",
    *   "title": "Alert",
-   *   "iconUrl": "https://notifyicons.pingie.com/icon123.png"
+   *   "iconUrl": "https://icons.getnotifyapp.com/icon123.png",
+   *   "imageUrl": "https://example.com/graph.png",
+   *   "groupType": "monitoring",
+   *   "timeSensitive": true
    * }
    *
-   * Example 2: Group Notification (note GRP prefix in ID)
-   * POST https://notifypush.pingie.com/notify-json/GRPFAMILY?token=XYZ789TOKEN123
-   * Content-Type: application/json
-   * {
-   *   "text": "Motion detected at front door",
-   *   "title": "Security",
-   *   "groupType": "all",
-   *   "iconUrl": "https://notifyicons.pingie.com/security.png"
-   * }
+   * Device success response (200):
+   * { "success": true, "type": "device", "deviceId": "ABC12345",
+   *   "message": "Notification sent successfully" }
    *
-   * API Response Format:
-   * Success (200 OK):
-   * {
-   *   "success": true,
-   *   "type": "device",  // or "group"
-   *   "deviceId": "ABC12345",  // or groupId
-   *   "message": "Notification sent successfully"
-   * }
+   * Group success response (200) reports per-device results. Note that a
+   * partial failure is still HTTP 200, so failureCount must be inspected:
+   * { "success": true, "type": "group", "groupId": "GRP45678",
+   *   "deviceCount": 3, "successCount": 2, "failureCount": 1, "results": [...] }
    *
-   * Error Response (4xx/5xx):
-   * {
-   *   "success": false,
-   *   "error": "Invalid token",
-   *   "message": "The provided token is not valid"
-   * }
+   * Error responses: 400 missing text or invalid JSON, 403 invalid token,
+   * 404 ID not found, 415 wrong Content-Type, 429 rate limited.
    *
-   * The method is private because it's only used internally by setOn().
-   *
-   * @returns Promise<any> - The API response data
-   * @throws Error if the API request fails
+   * @returns The API response data
+   * @throws Error if the request fails or the API reports a non-200 status
    */
   private async sendNotification() {
     /**
-     * Build the Unified API Endpoint
+     * Build the endpoint URL.
      *
-     * The /notify-json/{id} endpoint is the modern, preferred method.
-     * It auto-detects device vs group based on ID format:
-     * - Device IDs: Regular alphanumeric (e.g., "ABC12345")
-     * - Group IDs: Start with "GRP" prefix (e.g., "GRPFAMILY")
-     *
-     * Why use this endpoint?
-     * - Simpler than the legacy endpoints
-     * - Auto-detection reduces configuration errors
-     * - Supports all modern features (icons, threading, etc.)
+     * The ID goes in the path, so it must be URL-encoded. Without this an
+     * ID containing a space or slash (easy to introduce by pasting) would
+     * produce a malformed URL rather than a clean 404 from the API.
      */
-    const endpoint = `https://notifypush.pingie.com/notify-json/${this.webhookConfig.id}`;
+    const endpoint = `${NOTIFY_API_BASE_URL}/notify-json/${encodeURIComponent(this.webhookConfig.id)}`;
 
     /**
-     * Build Request Payload
+     * Build the request payload.
      *
-     * The JSON body structure for the unified endpoint.
-     * Only 'text' is required, all other fields are optional.
+     * Only 'text' is required. Optional fields are omitted entirely rather
+     * than sent as null, keeping the payload minimal.
      *
-     * IMPORTANT: Field names are case-sensitive!
-     * - 'text' not 'Text'
-     * - 'title' not 'Title'
-     * - 'iconUrl' not 'IconURL' or 'iconURL'
-     * - 'groupType' not 'GroupType'
+     * Field names are case-sensitive: 'iconUrl' and 'imageUrl' both end in
+     * a lowercase "rl".
      */
-    const payload: any = {
-      // REQUIRED: The notification message
-      // This is what the user will see as the main content
-      // Supports emojis and Unicode characters
-      // Maximum length: 10,000 characters
+    const payload: NotifyPayload = {
       text: this.webhookConfig.text,
     };
 
-    /**
-     * Add Optional Fields
-     *
-     * These enhance the notification but aren't required.
-     * We only include them if the user configured them to keep
-     * the payload minimal and avoid sending null/undefined values.
-     */
-
-    // OPTIONAL: Title appears above the notification text
-    // Used for categorizing or highlighting the notification
-    // Example: "Security Alert", "Reminder", "System Status"
-    // Maximum length: 250 characters
     if (this.webhookConfig.title) {
       payload.title = this.webhookConfig.title;
     }
 
-    // OPTIONAL: Group type for notification threading/grouping
-    // This controls how notifications are grouped on the device:
-    // - null/undefined: Default grouping behavior
-    // - "all": All notifications with same groupType are grouped together
-    // - "any": Each notification creates its own group
-    // - Custom string: Groups notifications with the same custom string
-    //
-    // Use cases:
-    // - "security": Group all security alerts together
-    // - "doorbell": Group all doorbell notifications
-    // - "system-alerts": Group system monitoring alerts
+    // Threading identifier. Notifications sharing a groupType collapse into
+    // one thread on the device. This does not affect group delivery.
     if (this.webhookConfig.groupType) {
       payload.groupType = this.webhookConfig.groupType;
     }
 
-    // OPTIONAL: Custom icon for the notification
-    // Must be a publicly accessible HTTPS URL
-    // Recommended: Use https://notifyicons.pingie.com/ for hosting
-    // Supported formats: PNG, JPG, GIF (static only)
-    // Recommended size: 512x512 pixels
-    // Maximum file size: 1MB
-    //
-    // Note the lowercase 'u' in 'iconUrl' - this is required by the API!
-    if (this.webhookConfig.iconURL) {
-      payload.iconUrl = this.webhookConfig.iconURL;  // Note: iconUrl not iconURL
+    /**
+     * Sender avatar icon.
+     *
+     * Accept both spellings: 'iconUrl' matches the API and is preferred for
+     * new configs, while 'iconURL' is the historical key this plugin shipped
+     * with. Reading both means existing configs keep working untouched.
+     */
+    const iconUrl = this.webhookConfig.iconUrl || this.webhookConfig.iconURL;
+    if (iconUrl) {
+      payload.iconUrl = iconUrl;
+    }
+
+    // Hero image shown inside the expanded notification
+    if (this.webhookConfig.imageUrl) {
+      payload.imageUrl = this.webhookConfig.imageUrl;
+    }
+
+    // Allow the notification to break through Focus and Do Not Disturb
+    if (this.webhookConfig.timeSensitive) {
+      payload.timeSensitive = true;
     }
 
     /**
-     * Debug Logging
+     * Debug logging
      *
-     * Log the complete request details for troubleshooting.
-     * This helps users debug issues with:
-     * - Incorrect IDs
-     * - Malformed payloads
-     * - Network issues
-     *
-     * Debug logs only appear when Homebridge is in debug mode (-D flag)
+     * Only appears when Homebridge runs in debug mode (-D). The token is
+     * truncated because Homebridge logs are routinely shared in bug reports.
      */
     this.platform.log.debug('Sending notification to:', endpoint);
-    this.platform.log.debug('With token:', this.webhookConfig.token.substring(0, Math.min(5, this.webhookConfig.token.length)) + '...'); // Only show first 5 chars for security
+    this.platform.log.debug(
+      'With token:',
+      this.webhookConfig.token.substring(0, Math.min(5, this.webhookConfig.token.length)) + '...',
+    );
     this.platform.log.debug('Payload:', JSON.stringify(payload, null, 2));
 
     /**
-     * Make the API Request
+     * Make the API request.
      *
-     * We use axios for HTTP requests because it:
-     * - Has built-in JSON serialization/deserialization
-     * - Provides comprehensive error handling
-     * - Supports request/response interceptors
-     * - Works seamlessly with async/await
-     * - Has TypeScript definitions
-     *
-     * The token is passed as a query parameter, not in the body or headers.
-     * This is a requirement of the Notify API.
+     * The token is passed as a query parameter, which is what the API
+     * expects. maxRedirects is deliberately 0: because the token rides in
+     * the query string, following a cross-host redirect would forward the
+     * credential to whatever host the redirect names. A 3xx is handled
+     * explicitly below instead.
      */
     const response = await axios.post(
-      endpoint,  // The full URL with ID in path
-      payload,   // The JSON body
+      endpoint,
+      payload,
       {
         headers: {
-          // REQUIRED: Must specify JSON content type
-          // The API will reject requests without this header
+          // Required. The API returns 415 without it.
           'Content-Type': 'application/json',
         },
         params: {
-          // REQUIRED: Authentication token as query parameter
-          // Not in header, not in body - must be in URL query string
           token: this.webhookConfig.token,
         },
-        // Network timeout to prevent hanging
-        // 10 seconds should be plenty for a notification API
-        // If it takes longer, something is likely wrong
+        // Network timeout to prevent a hanging request
         timeout: 10000,
-        // Don't follow redirects - we want the direct response
+        // Do not follow redirects (see above)
         maxRedirects: 0,
-        // Validate status - axios will throw for 4xx/5xx by default
-        validateStatus: (status) => status < 500,  // Only throw for 5xx errors
+        // Let us handle 3xx and 4xx ourselves; axios throws only on 5xx
+        validateStatus: (status) => status < 500,
       },
     );
 
     /**
-     * Response Validation
+     * Redirect handling
      *
-     * The Notify API returns:
-     * - 200 OK: Notification sent successfully
-     * - 400 Bad Request: Invalid parameters (bad ID, token, etc.)
-     * - 401 Unauthorized: Invalid or expired token
-     * - 404 Not Found: Device/Group ID doesn't exist
-     * - 429 Too Many Requests: Rate limited
-     * - 500+ Server Error: Notify service issue
+     * A 3xx means the API endpoint has moved. Since redirects are not
+     * followed, report it as an actionable message naming the new location
+     * rather than a bare status code, because the fix is to update the
+     * plugin rather than anything in the user's configuration.
      */
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers?.location;
+      throw new Error(
+        'The Notify API endpoint has moved' +
+          (location ? ` to ${location}` : '') +
+          '. Update homebridge-notify-alerts to the latest version.',
+      );
+    }
+
     if (response.status !== 200) {
       // Build a detailed error message for logging
       let errorMessage = `API returned status ${response.status}: ${response.statusText}`;
 
-      // Try to extract error details from response
+      /**
+       * Append whatever detail the API gave us. The 'error' field often just
+       * repeats the HTTP status text ("Forbidden"), so it is skipped when it
+       * adds nothing, leaving the human-readable 'message' to do the work.
+       */
       if (response.data) {
-        if (response.data.error) {
+        if (response.data.error && response.data.error !== response.statusText) {
           errorMessage += ` - ${response.data.error}`;
         }
         if (response.data.message) {
           errorMessage += ` - ${response.data.message}`;
+        }
+
+        /**
+         * A delivery rejected by Apple comes back as a generic "Failed to
+         * send notification" with the real reason buried in apnsError. That
+         * reason is the only actionable part, so surface it. BadDeviceToken
+         * in particular means the device needs to be re-registered in the
+         * Notify app, which no amount of checking the config will fix.
+         */
+        const apnsReason = response.data.apnsError?.reason;
+        if (apnsReason) {
+          errorMessage += ` (Apple rejected the delivery: ${apnsReason})`;
         }
       }
 
@@ -587,22 +584,29 @@ export class NotifyWebhookAccessory {
     }
 
     /**
-     * Success Response
+     * Partial group failure detection
      *
-     * Log successful response for debugging
-     * The response typically contains:
-     * - success: true
-     * - type: "device" or "group"
-     * - deviceId or groupId: The ID that received the notification
-     * - message: Success message from API
+     * A group send where some devices failed still returns HTTP 200. Without
+     * this check the log would report unqualified success while the
+     * notification never reached part of the group.
      */
-    this.platform.log.info('Notification sent successfully. Response:', JSON.stringify(response.data));
+    const data = response.data;
+    if (data && typeof data.failureCount === 'number' && data.failureCount > 0) {
+      this.platform.log.warn(
+        `Notification for ${this.webhookConfig.name} reached ` +
+          `${data.successCount ?? 0} of ${data.deviceCount ?? 'unknown'} devices in the group ` +
+          `(${data.failureCount} failed)`,
+      );
+    }
 
-    // Return the response data for potential future use
-    // Currently not used, but could be useful for:
-    // - Tracking notification IDs
-    // - Logging delivery confirmations
-    // - Building notification history
-    return response.data;
+    /**
+     * Log the response at debug level only.
+     *
+     * A group response enumerates every member device ID, which does not
+     * belong in a log that users routinely paste into bug reports.
+     */
+    this.platform.log.debug('Notification API response:', JSON.stringify(data));
+
+    return data;
   }
 }

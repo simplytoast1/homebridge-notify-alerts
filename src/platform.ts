@@ -23,29 +23,32 @@ import { NotifyWebhookAccessory } from './webhookAccessory';
  *
  * CONFIGURATION EXAMPLE:
  * {
- *   "name": "Front Door Alert",           // Required: HomeKit switch name
- *   "id": "ABC12345",                     // Required: Device ID
- *   "token": "XYZ789TOKEN",                // Required: API token
- *   "text": "Motion at front door!",      // Required: Notification text
- *   "title": "Security",                  // Optional: Notification title
- *   "iconURL": "https://example.com/door.png", // Optional: Icon URL
- *   "groupType": "security"               // Optional: Threading ID
+ *   "name": "Front Door Alert",                 // Required: HomeKit switch name
+ *   "id": "ABC12345",                           // Required: Device ID
+ *   "token": "XYZ789TOKEN",                     // Required: API token
+ *   "text": "Motion at front door!",            // Required: Notification text
+ *   "title": "Security",                        // Optional: Notification title
+ *   "iconUrl": "https://example.com/door.png",  // Optional: Sender avatar
+ *   "imageUrl": "https://example.com/cam.jpg",  // Optional: Hero image
+ *   "groupType": "security",                    // Optional: Threading ID
+ *   "timeSensitive": true                       // Optional: Break through Focus
  * }
  *
  * GROUP EXAMPLE:
  * {
  *   "name": "Family Alert",
- *   "id": "GRPFAMILY",                     // Note: GRP prefix for groups
+ *   "id": "GRP56789",                           // Note: GRP prefix for groups
  *   "token": "XYZ789TOKEN",
  *   "text": "Dinner is ready!",
- *   "groupType": "all"                     // Send to all in group
- * }
+ *   "groupType": "family"                       // Threading only, not fan-out:
+ * }                                             // group sends address every member
  */
 export interface WebhookConfig {
   // REQUIRED FIELDS - These must be present for the webhook to work
 
   name: string;          // Display name for the HomeKit switch
                         // Shows in Home app, used for Siri commands
+                        // Must be unique: the accessory identity is derived from it
                         // Example: "Front Door Alert", "Garage Open"
 
   token: string;         // Notify API authentication token
@@ -55,11 +58,13 @@ export interface WebhookConfig {
   text: string;          // The notification message content
                         // What the user sees in the notification
                         // Supports emojis and Unicode
-                        // Max length: 10,000 characters
+                        // Body limit is 16 KB; the push itself shows a
+                        // shortened form and the full text is kept in History
 
   id: string;            // Device or Group ID
-                        // Device IDs: Regular format (e.g., "ABC12345")
-                        // Group IDs: Must start with "GRP" (e.g., "GRPFAMILY")
+                        // Device IDs: 8 characters (e.g., "ABC12345")
+                        // Web devices: "WB" + 14 characters
+                        // Group IDs: "GRP" + 5 characters (e.g., "GRP56789")
                         // The API auto-detects the type based on prefix
 
   // OPTIONAL FIELDS - Enhance the notification but aren't required
@@ -67,20 +72,39 @@ export interface WebhookConfig {
   title?: string;        // Notification title (appears above text)
                         // Use for categorization or emphasis
                         // Examples: "Alert", "Reminder", "System Status"
-                        // Max length: 250 characters
 
-  groupType?: string;    // Threading identifier for notification grouping
-                        // Controls how notifications are grouped:
-                        // - "all": Send to all devices in group
-                        // - "any": Send to any available device
-                        // - Custom string: Groups notifications together
+  groupType?: string;    // Threading identifier for notification grouping.
+                        // Free-form, case-sensitive text. Notifications sharing
+                        // a groupType collapse into one thread on the device;
+                        // different values create separate threads.
+                        // It has NO effect on addressing: a group send is
+                        // always addressed to every member regardless of this
+                        // value, though individual deliveries can still fail.
                         // Examples: "security", "doorbell", "alerts"
 
-  iconURL?: string;      // URL to custom icon image
-                        // Must be HTTPS and publicly accessible
-                        // Recommended: https://notifyicons.pingie.com/
-                        // Formats: PNG, JPG, GIF (static)
-                        // Recommended size: 512x512px, max 1MB
+  iconURL?: string;      // URL to the small circular sender avatar icon.
+                        // Must be HTTPS and publicly accessible.
+                        // Icon hosting: https://icons.getnotifyapp.com/
+                        // If the URL cannot be loaded the API falls back to a
+                        // generic icon so the notification still displays.
+                        //
+                        // Note the capital "URL". This is the key the
+                        // settings UI reads and writes, and the one to prefer.
+
+  iconUrl?: string;      // Alias matching the API's own field name, accepted
+                        // for hand-written config.json entries copied from the
+                        // API docs. If both are set, this one wins. The
+                        // settings UI does not manage this spelling, so
+                        // "iconURL" above is the better choice.
+
+  imageUrl?: string;     // URL to a hero image rendered inside the expanded
+                        // notification. HTTPS, JPEG/PNG/GIF, up to 10 MB.
+                        // Independent of the icon: use either, both, or neither.
+
+  timeSensitive?: boolean; // Marks the notification as time sensitive, allowing
+                        // it to break through Focus and Do Not Disturb.
+                        // Reserve this for genuine alerts (leaks, security,
+                        // smoke). Overuse trains people to ignore it.
 }
 
 /**
@@ -281,6 +305,32 @@ export class NotifyWebhookPlatform implements DynamicPlatformPlugin {
         continue;  // Skip this webhook and try the next one
       }
 
+      /**
+       * UUID Generation and Duplicate Name Check
+       *
+       * Each accessory needs a unique identifier, generated from the webhook
+       * name so the same webhook always maps to the same accessory.
+       *
+       * This deliberately happens BEFORE the remaining validations. The UUID
+       * is what marks an accessory as still wanted, and the stale-accessory
+       * sweep at the end of this method unregisters anything unclaimed. If a
+       * webhook that merely failed validation never claimed its UUID, a
+       * momentarily blank token would delete the user's switch from HomeKit
+       * along with its room assignment, scenes and automations. An inert
+       * switch is recoverable; a deleted one is not.
+       *
+       * Two webhooks with the same name would map to the same accessory, the
+       * second silently overwriting the first, so duplicates are skipped.
+       */
+      const uuid = this.api.hap.uuid.generate(webhook.name);
+
+      if (processedUuids.has(uuid)) {
+        this.log.error(`Duplicate webhook name "${webhook.name}" - skipping this entry`);
+        this.log.error('Each webhook needs a unique name to appear as its own switch');
+        continue;
+      }
+      processedUuids.add(uuid);
+
       // VALIDATION 2: Token is required for API authentication
       // The token:
       // - Authenticates requests to the Notify API
@@ -313,32 +363,6 @@ export class NotifyWebhookPlatform implements DynamicPlatformPlugin {
         this.log.error('Example device: "ABC12345", Example group: "GRPFAMILY"');
         continue;
       }
-
-      /**
-       * UUID Generation
-       *
-       * Each accessory needs a unique identifier (UUID).
-       * We generate this from the webhook name to ensure:
-       * - The same webhook always gets the same UUID
-       * - Different webhooks get different UUIDs
-       * - We can find cached accessories by webhook name
-       */
-      const uuid = this.api.hap.uuid.generate(webhook.name);
-
-      /**
-       * Duplicate Name Check
-       *
-       * Two webhooks with the same name would map to the same UUID and
-       * therefore the same accessory. The second one would overwrite the
-       * first's configuration and handler, silently breaking it. Skip
-       * duplicates and tell the user how to fix it.
-       */
-      if (processedUuids.has(uuid)) {
-        this.log.error(`Duplicate webhook name "${webhook.name}" - skipping this entry`);
-        this.log.error('Each webhook needs a unique name to appear as its own switch');
-        continue;
-      }
-      processedUuids.add(uuid);
 
       /**
        * Check for Existing Accessory

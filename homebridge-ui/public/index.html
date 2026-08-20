@@ -1,300 +1,313 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Notify Webhooks Configuration</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css">
-    <style>
-        .webhook-card {
-            margin-bottom: 20px;
-        }
-        .test-button {
-            margin-top: 10px;
-        }
-        .test-result {
-            margin-top: 10px;
-        }
-        .help-text {
-            color: #6c757d;
-            font-size: 0.875rem;
-            margin-top: 0.25rem;
-        }
-        .required::after {
-            content: ' *';
-            color: #dc3545;
-        }
-        .id-section {
-            background-color: #f8f9fa;
-            padding: 15px;
-            border-radius: 5px;
-            margin: 10px 0;
-        }
-    </style>
-</head>
-<body>
-    <div id="app" class="container-fluid">
-        <div class="row mt-3">
-            <div class="col-12">
-                <h3>Notify Webhooks Configuration</h3>
-                <p>Configure your notification webhooks below. Each webhook will appear as a switch in HomeKit that automatically turns off after being activated.</p>
+<!--
+  Notify Alerts custom settings UI.
 
-                <div id="webhooks-container"></div>
+  This file is injected into the Homebridge UI, which supplies the surrounding
+  document and its stylesheet. Per the plugin-ui-utils documentation it must
+  not declare <html>, <head> or <body>, and it must not load its own CSS
+  framework: the Homebridge UI already ships Bootstrap and mirrors its theme
+  stylesheets into this frame.
 
-                <button id="add-webhook" class="btn btn-success">
-                    Add Webhook
-                </button>
+  Classes used here that the Homebridge UI provides: btn, btn-primary,
+  btn-secondary, form-control, alert, alert-success, alert-danger, and
+  custom-select (Homebridge's own select class, which unlike Bootstrap's
+  form-select is styled correctly in the dark themes). Layout classes prefixed
+  notify- are defined locally below.
 
-            </div>
-        </div>
+  The configuration form itself is rendered by homebridge.showSchemaForm(),
+  driven by config.schema.json. Everything here is the thin shell around it:
+  an explanation, and the two buttons that talk to the Notify API.
+-->
+
+<style>
+  .notify-panel {
+    margin-bottom: 1.25rem;
+  }
+
+  /* Inherit the theme's text colour and step it back, rather than hardcoding
+     a grey that only reads correctly against a light background. */
+  .notify-muted {
+    opacity: 0.75;
+    font-size: 0.875rem;
+  }
+
+  .notify-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: flex-end;
+    margin-top: 0.75rem;
+  }
+
+  .notify-field {
+    flex: 1 1 16rem;
+    margin-bottom: 0;
+  }
+
+  .notify-result:empty {
+    display: none;
+  }
+
+  .notify-result {
+    margin-top: 0.75rem;
+  }
+
+  .notify-result-detail {
+    display: block;
+    opacity: 0.8;
+    font-size: 0.875rem;
+  }
+
+  /*
+    The Homebridge themes restyle .alert at a higher specificity than
+    Bootstrap's own alert-success / alert-danger variants, so success and
+    failure would otherwise look identical. These rules sit one class higher
+    again so the outcome stays readable. border-color carries the light
+    themes; box-shadow carries the dark ones, where the theme removes borders.
+  */
+  .notify-result .alert.alert-success {
+    border-color: #388e3c;
+    box-shadow: 0 0 1px #388e3c;
+  }
+
+  .notify-result .alert.alert-danger {
+    border-color: #d32f2f;
+    box-shadow: 0 0 1px #d32f2f;
+  }
+</style>
+
+<div class="notify-panel">
+  <p class="notify-muted">
+    Each webhook below becomes a switch in HomeKit. Turning the switch on sends the
+    notification, and the switch turns itself off again a second later.
+  </p>
+
+  <div class="notify-actions">
+    <div class="notify-field">
+      <label for="notify-webhook-select">Check a webhook</label>
+      <select id="notify-webhook-select" class="custom-select"></select>
     </div>
 
-    <script>
-        // Wait for the homebridge UI API to be ready
-        window.homebridge.addEventListener('ready', async () => {
-            let config = {};
-            let webhooks = [];
+    <button id="notify-verify" class="btn btn-primary" type="button">
+      Verify credentials
+    </button>
 
-            // Load current configuration
-            async function loadConfig() {
-                try {
-                    const configs = await window.homebridge.getPluginConfig();
-                    config = configs[0] || { name: 'Notify Webhooks', webhooks: [] };
+    <button id="notify-test" class="btn btn-secondary" type="button">
+      Send test push
+    </button>
+  </div>
 
-                    // Ensure config has required fields
-                    if (!config.name) {
-                        config.name = 'Notify Webhooks';
-                    }
+  <p class="notify-muted" style="margin-top: 0.5rem;">
+    <strong>Verify credentials</strong> checks the ID and token against the Notify API and
+    shows which device or group they belong to, without sending anything.
+    <strong>Send test push</strong> delivers a real notification, which is the only way to
+    confirm the message actually arrives on the device.
+  </p>
 
-                    webhooks = config.webhooks || [];
+  <div id="notify-result" class="notify-result" role="status" aria-live="polite"></div>
+</div>
 
-                    // Ensure we have at least one empty webhook for new users
-                    if (webhooks.length === 0) {
-                        webhooks.push({
-                            name: '',
-                            token: '',
-                            text: '',
-                            id: ''
-                        });
-                    }
+<script>
+  (() => {
+    const selectEl = document.getElementById('notify-webhook-select');
+    const verifyButton = document.getElementById('notify-verify');
+    const testButton = document.getElementById('notify-test');
+    const resultEl = document.getElementById('notify-result');
 
-                    renderWebhooks();
-                } catch (error) {
-                    window.homebridge.toast.error('Failed to load configuration');
-                    console.error(error);
-                }
-            }
+    let webhooks = [];
 
-            // Render webhook forms
-            function renderWebhooks() {
-                const container = document.getElementById('webhooks-container');
-                container.innerHTML = '';
+    /**
+     * Render a result message.
+     *
+     * Everything is written with textContent. The name comes back from the
+     * Notify API and the error text can be an arbitrary API response, so none
+     * of it is ever treated as markup.
+     */
+    function showResult(type, message, detail) {
+      resultEl.innerHTML = '';
 
-                webhooks.forEach((webhook, index) => {
-                    const card = document.createElement('div');
-                    card.className = 'card webhook-card';
-                    card.innerHTML = `
-                        <div class="card-body">
-                            <h5 class="card-title">
-                                Webhook ${index + 1}
-                                <button class="btn btn-danger btn-sm float-right" onclick="removeWebhook(${index})">Remove</button>
-                            </h5>
+      const alert = document.createElement('div');
+      alert.className = `alert alert-${type}`;
+      alert.textContent = message;
 
-                            <div class="form-group">
-                                <label class="required">Name</label>
-                                <input type="text" class="form-control webhook-name" data-index="${index}"
-                                       placeholder="Switch name in HomeKit">
-                                <small class="help-text">The name that will appear for this switch in HomeKit</small>
-                            </div>
+      if (detail) {
+        const small = document.createElement('span');
+        small.className = 'notify-result-detail';
+        small.textContent = detail;
+        alert.appendChild(small);
+      }
 
-                            <div class="form-group">
-                                <label class="required">Token</label>
-                                <input type="text" class="form-control webhook-token" data-index="${index}"
-                                       placeholder="Your Notify API token">
-                                <small class="help-text">Your Notify API authentication token</small>
-                            </div>
+      resultEl.appendChild(alert);
+    }
 
-                            <div class="form-group">
-                                <label class="required">Message</label>
-                                <textarea class="form-control webhook-text" data-index="${index}" rows="2"
-                                          placeholder="Notification message"></textarea>
-                                <small class="help-text">The notification message to send</small>
-                            </div>
+    function clearResult() {
+      resultEl.innerHTML = '';
+    }
 
-                            <div class="id-section">
-                                <h6>Target ID (Device or Group)</h6>
-                                <p class="help-text">Enter a Device ID or Group ID. Groups have "GRP" prefix and are auto-detected.</p>
+    /**
+     * Rebuild the webhook picker from the current plugin configuration.
+     *
+     * Options are built as DOM nodes so a webhook named with quotes or markup
+     * cannot break the list.
+     */
+    function populateSelect() {
+      const previous = selectEl.value;
+      selectEl.innerHTML = '';
 
-                                <div class="form-group">
-                                    <label class="required">ID</label>
-                                    <input type="text" class="form-control webhook-id" data-index="${index}"
-                                           placeholder="Device ID or Group ID (e.g., GRP123)">
-                                    <small class="help-text">Device ID or Group ID - the API auto-detects the type</small>
-                                </div>
+      if (webhooks.length === 0) {
+        const option = document.createElement('option');
+        option.textContent = 'No webhooks configured yet';
+        option.value = '';
+        selectEl.appendChild(option);
+        selectEl.disabled = true;
+        verifyButton.disabled = true;
+        testButton.disabled = true;
+        return;
+      }
 
-                                <div class="form-group">
-                                    <label>Group Type (optional)</label>
-                                    <input type="text" class="form-control webhook-groupType" data-index="${index}"
-                                           placeholder="e.g., all, any, security, doorbell">
-                                    <small class="help-text">Threading identifier for notification grouping (optional free-form text)</small>
-                                </div>
-                            </div>
+      webhooks.forEach((webhook, index) => {
+        const option = document.createElement('option');
+        option.value = String(index);
+        option.textContent = (webhook && webhook.name)
+          ? webhook.name
+          : `Webhook ${index + 1} (unnamed)`;
+        selectEl.appendChild(option);
+      });
 
-                            <div class="form-group">
-                                <label>Title (optional)</label>
-                                <input type="text" class="form-control webhook-title" data-index="${index}"
-                                       placeholder="Notification title">
-                                <small class="help-text">Optional title for the notification</small>
-                            </div>
+      selectEl.disabled = false;
+      verifyButton.disabled = false;
+      testButton.disabled = false;
 
-                            <div class="form-group">
-                                <label>Icon URL (optional)</label>
-                                <input type="text" class="form-control webhook-iconURL" data-index="${index}"
-                                       placeholder="https://notifyicons.pingie.com/...">
-                                <small class="help-text">
-                                    Optional icon URL. Visit
-                                    <a href="https://notifyicons.pingie.com/" target="_blank">notifyicons.pingie.com</a>
-                                    for icon hosting
-                                </small>
-                            </div>
+      // Keep the user's selection across edits where possible.
+      if (previous && Number(previous) < webhooks.length) {
+        selectEl.value = previous;
+      }
+    }
 
-                            <button class="btn btn-info test-button" onclick="testWebhook(${index})">Test Webhook</button>
+    /**
+     * Read the current configuration straight from the Homebridge UI.
+     *
+     * The schema form owns the config, so this always reads back rather than
+     * keeping a parallel copy that could drift out of sync with the form.
+     */
+    async function refreshWebhooks() {
+      try {
+        const blocks = await window.homebridge.getPluginConfig();
+        const config = blocks[0] || {};
+        webhooks = Array.isArray(config.webhooks) ? config.webhooks : [];
+      } catch (error) {
+        webhooks = [];
+        window.homebridge.toast.error('Failed to read the plugin configuration');
+      }
 
-                            <div id="test-result-${index}" class="test-result"></div>
-                        </div>`;
+      populateSelect();
+    }
 
-                    // Populate field values via DOM properties instead of the
-                    // HTML template. Quotes or markup in saved values would
-                    // break the form (or inject HTML) if interpolated above.
-                    card.querySelector('.webhook-name').value = webhook.name || '';
-                    card.querySelector('.webhook-token').value = webhook.token || '';
-                    card.querySelector('.webhook-text').value = webhook.text || '';
-                    card.querySelector('.webhook-id').value = webhook.id || '';
-                    card.querySelector('.webhook-groupType').value = webhook.groupType || '';
-                    card.querySelector('.webhook-title').value = webhook.title || '';
-                    card.querySelector('.webhook-iconURL').value = webhook.iconURL || '';
+    function selectedWebhook() {
+      const index = Number(selectEl.value);
+      return Number.isInteger(index) ? webhooks[index] : undefined;
+    }
 
-                    container.appendChild(card);
-                });
+    verifyButton.addEventListener('click', async () => {
+      const webhook = selectedWebhook();
+      clearResult();
 
-                // Add event listeners
-                attachEventListeners();
-            }
+      if (!webhook) {
+        showResult('danger', 'Select a webhook first');
+        return;
+      }
 
-            // Attach event listeners to form inputs
-            function attachEventListeners() {
-                // Update webhook data on change
-                document.querySelectorAll('.webhook-name, .webhook-token, .webhook-text, .webhook-id, .webhook-title, .webhook-iconURL, .webhook-groupType').forEach(input => {
-                    input.addEventListener('input', async (e) => {
-                        const index = parseInt(e.target.dataset.index);
-                        const field = e.target.className.split('webhook-')[1].split(' ')[0];
-                        webhooks[index][field] = e.target.value;
+      if (!webhook.id || !webhook.token) {
+        showResult('danger', 'This webhook needs both an ID and a Token before it can be verified');
+        return;
+      }
 
-                        // Update config with Homebridge whenever a field changes
-                        await updateConfig();
-                    });
-                });
-            }
+      window.homebridge.showSpinner();
 
-            // Add a new webhook
-            window.addWebhook = async function() {
-                webhooks.push({
-                    name: `Webhook ${webhooks.length + 1}`,
-                    token: '',
-                    text: '',
-                    id: ''
-                });
-                renderWebhooks();
-                await updateConfig();
-            };
-
-            // Remove a webhook
-            window.removeWebhook = async function(index) {
-                if (confirm('Are you sure you want to remove this webhook?')) {
-                    webhooks.splice(index, 1);
-                    renderWebhooks();
-                    await updateConfig();
-                }
-            };
-
-            // Render a test result as plain text so API error responses
-            // can never inject HTML into the page.
-            function showTestResult(resultDiv, type, message) {
-                resultDiv.innerHTML = '';
-                const alert = document.createElement('div');
-                alert.className = 'alert alert-' + type;
-                alert.textContent = message;
-                resultDiv.appendChild(alert);
-            }
-
-            // Test a webhook
-            window.testWebhook = async function(index) {
-                const webhook = webhooks[index];
-                const resultDiv = document.getElementById(`test-result-${index}`);
-
-                // Clear previous result
-                resultDiv.innerHTML = '';
-                resultDiv.className = 'test-result';
-
-                // Validate
-                if (!webhook.name) {
-                    showTestResult(resultDiv, 'danger', 'Name is required');
-                    return;
-                }
-
-                if (!webhook.token || !webhook.text) {
-                    showTestResult(resultDiv, 'danger', 'Token and Message are required');
-                    return;
-                }
-
-                if (!webhook.id) {
-                    showTestResult(resultDiv, 'danger', 'ID is required');
-                    return;
-                }
-
-                // Show loading
-                showTestResult(resultDiv, 'info', 'Testing webhook...');
-
-                try {
-                    // Send test request to our server
-                    const response = await window.homebridge.request('/test-webhook', webhook);
-
-                    if (response.success) {
-                        showTestResult(resultDiv, 'success', response.message || 'Notification sent successfully!');
-                        window.homebridge.toast.success('Webhook test successful!');
-                    } else {
-                        showTestResult(resultDiv, 'danger', response.error || 'Test failed');
-                        window.homebridge.toast.error('Test failed: ' + (response.error || 'Unknown error'));
-                    }
-                } catch (error) {
-                    showTestResult(resultDiv, 'danger', 'Error: ' + error.message);
-                    window.homebridge.toast.error('Test failed: ' + error.message);
-                }
-            };
-
-            // Function to update config with Homebridge
-            async function updateConfig() {
-                // Update webhooks in config (keep all webhooks during editing)
-                config.webhooks = webhooks;
-
-                // Ensure name is set
-                if (!config.name) {
-                    config.name = 'Notify Webhooks';
-                }
-
-                // Always update the config
-                try {
-                    await window.homebridge.updatePluginConfig([config]);
-                } catch (error) {
-                    console.error('Failed to update config:', error);
-                }
-            }
-
-            // Add webhook button
-            document.getElementById('add-webhook').addEventListener('click', addWebhook);
-
-            // Load configuration on startup
-            await loadConfig();
+      try {
+        const response = await window.homebridge.request('/verify-credentials', {
+          id: webhook.id,
+          token: webhook.token,
         });
-    </script>
-</body>
-</html>
+
+        if (response && response.success) {
+          const suffix = response.cached ? ' (cached)' : '';
+          showResult('success', `Verified: ${response.name}${suffix}`, response.detail);
+        } else {
+          showResult('danger', (response && response.error) || 'Verification failed');
+        }
+      } catch (error) {
+        showResult('danger', `Error: ${error.message}`);
+      } finally {
+        window.homebridge.hideSpinner();
+      }
+    });
+
+    testButton.addEventListener('click', async () => {
+      const webhook = selectedWebhook();
+      clearResult();
+
+      if (!webhook) {
+        showResult('danger', 'Select a webhook first');
+        return;
+      }
+
+      if (!webhook.id || !webhook.token || !webhook.text) {
+        showResult('danger', 'This webhook needs an ID, a Token and a Message before it can be tested');
+        return;
+      }
+
+      window.homebridge.showSpinner();
+
+      try {
+        const response = await window.homebridge.request('/test-webhook', webhook);
+
+        if (response && response.success) {
+          showResult('success', response.message || 'Notification sent successfully!');
+          window.homebridge.toast.success('Test notification sent');
+        } else {
+          showResult('danger', (response && response.error) || 'Test failed');
+        }
+      } catch (error) {
+        showResult('danger', `Error: ${error.message}`);
+      } finally {
+        window.homebridge.hideSpinner();
+      }
+    });
+
+    window.homebridge.addEventListener('ready', async () => {
+      /**
+       * Seed a configuration block on a fresh install.
+       *
+       * The Homebridge UI only renders the schema form when a config block
+       * already exists for the plugin. The non-custom settings screen creates
+       * one itself, but the custom UI path leaves that to the plugin. Without
+       * this, a user installing for the first time would see this panel and
+       * no configuration form at all, with no way to add a webhook.
+       *
+       * updatePluginConfig only stages the block in memory, so closing the
+       * screen without saving still writes nothing to disk.
+       */
+      try {
+        const blocks = await window.homebridge.getPluginConfig();
+        if (!blocks.length) {
+          await window.homebridge.updatePluginConfig([{ name: 'Notify Alerts', webhooks: [] }]);
+        }
+      } catch (error) {
+        window.homebridge.toast.error('Failed to read the plugin configuration');
+      }
+
+      // Render the config.schema.json form below this panel. Requires
+      // singular: true in config.schema.json, which this plugin sets, and a
+      // config block to exist, which the seed above guarantees.
+      window.homebridge.showSchemaForm();
+
+      await refreshWebhooks();
+    });
+
+    // Fires (debounced) whenever the schema form is edited, so the picker
+    // tracks renamed and newly added webhooks without a page reload.
+    window.homebridge.addEventListener('configChanged', () => {
+      refreshWebhooks();
+    });
+  })();
+</script>

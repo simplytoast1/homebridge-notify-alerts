@@ -4,8 +4,8 @@
   "singular": true,
   "customUi": true,
   "recommendChildBridge": true,
-  "headerDisplay": "This plugin allows you to send notifications through Notify API using HomeKit switches. Each webhook appears as a switch that automatically turns off after being turned on. Running as a child bridge is recommended for better stability.",
-  "footerDisplay": "Need help with icon hosting? Visit [https://notifyicons.pingie.com/](https://notifyicons.pingie.com/)",
+  "headerDisplay": "Send notifications through the [Notify! API](https://getnotifyapp.com/apidocs/) using HomeKit switches. Each webhook appears as a switch that turns itself off a second after being activated. Running as a child bridge is recommended for better stability.",
+  "footerDisplay": "Need somewhere to host icons? Visit [https://icons.getnotifyapp.com/](https://icons.getnotifyapp.com/)",
   "schema": {
     "type": "object",
     "properties": {
@@ -25,12 +25,12 @@
             "name": {
               "title": "Webhook Name",
               "type": "string",
-              "description": "The name of the switch as it will appear in HomeKit."
+              "description": "The name of the switch as it will appear in HomeKit. Must be unique."
             },
             "token": {
               "title": "Token",
               "type": "string",
-              "description": "Your Notify API token."
+              "description": "Your Notify API token, from the Notify! app."
             },
             "text": {
               "title": "Message Text",
@@ -40,22 +40,33 @@
             "id": {
               "title": "ID",
               "type": "string",
-              "description": "Device ID or Group ID. Groups have 'GRP' prefix and are auto-detected by the API."
+              "description": "Device ID, web device ID, or Group ID. Group IDs are 'GRP' plus 5 characters; web device IDs are 'WB' plus 14 characters. The API detects the type automatically."
             },
             "title": {
               "title": "Notification Title",
               "type": "string",
-              "description": "Optional title for the notification."
+              "description": "Optional title shown above the message."
             },
             "groupType": {
-              "title": "Group Type",
+              "title": "Thread ID",
               "type": "string",
-              "description": "Optional threading identifier for notification grouping (free-form text, e.g., 'all', 'any', 'security', 'doorbell')"
+              "description": "Optional threading identifier. Notifications sharing a value collapse into one thread on the device (for example 'security' or 'doorbell'). This does not affect addressing: a group send goes to every member regardless."
             },
             "iconURL": {
               "title": "Icon URL",
               "type": "string",
-              "description": "Optional URL to an icon for the notification. Visit https://notifyicons.pingie.com/ for icon hosting."
+              "description": "Optional HTTPS URL for the small circular sender icon. Host icons at https://icons.getnotifyapp.com/ if you need somewhere to put them."
+            },
+            "imageUrl": {
+              "title": "Hero Image URL",
+              "type": "string",
+              "description": "Optional HTTPS URL for a larger image shown when the notification is expanded. JPEG, PNG or GIF, up to 10 MB."
+            },
+            "timeSensitive": {
+              "title": "Time Sensitive",
+              "type": "boolean",
+              "default": false,
+              "description": "Allow this notification to break through Focus and Do Not Disturb. Reserve it for genuine alerts such as leaks, smoke or security events."
             }
           },
           "required": ["name", "token", "text", "id"]
@@ -76,7 +87,7 @@
     },
     {
       "type": "section",
-      "title": "Webhooks Configuration",
+      "title": "Webhooks",
       "expandable": true,
       "expanded": true,
       "items": [
@@ -93,10 +104,6 @@
               "items": [
                 "webhooks[].token",
                 "webhooks[].text",
-                {
-                  "type": "help",
-                  "helpvalue": "<div style='background:#d1ecf1;border:1px solid #0c5460;border-radius:4px;padding:8px;margin:8px 0'><strong>ℹ️ ID Field:</strong> Enter a Device ID or Group ID. Groups have 'GRP' prefix and are auto-detected by the API.</div>"
-                },
                 "webhooks[].id"
               ]
             },
@@ -108,11 +115,9 @@
               "items": [
                 "webhooks[].title",
                 "webhooks[].groupType",
+                "webhooks[].timeSensitive",
                 "webhooks[].iconURL",
-                {
-                  "type": "help",
-                  "helpvalue": "<a href='https://notifyicons.pingie.com/' target='_blank'>Need help with icon hosting? Click here</a>"
-                }
+                "webhooks[].imageUrl"
               ]
             }
           ]

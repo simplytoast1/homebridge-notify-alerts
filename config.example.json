@@ -5,7 +5,7 @@
     "port": 51826,
     "pin": "031-45-154"
   },
-  "description": "Example configuration for Homebridge Notify Webhooks plugin",
+  "description": "Example configuration for Homebridge Notify Alerts",
   "platforms": [
     {
       "platform": "NotifyWebhooks",
@@ -19,40 +19,50 @@
           "text": "Motion detected at the front door!"
         },
         {
-          "_comment": "Notification with title and custom icon",
+          "_comment": "Notification with a title, a sender icon and a hero image",
           "name": "Garage Door Alert",
           "token": "YOUR_API_TOKEN_HERE",
           "id": "YOUR_DEVICE_ID",
           "text": "The garage door has been opened",
-          "title": "🚗 Garage Alert",
-          "iconURL": "https://notifyicons.pingie.com/your-icon.png"
+          "title": "Garage Alert",
+          "iconURL": "https://icons.getnotifyapp.com/your-icon.png",
+          "imageUrl": "https://example.com/garage-camera-still.jpg"
         },
         {
-          "_comment": "Group notification - sends to all devices in group (note GRP prefix)",
+          "_comment": "Group notification. Group IDs are GRP plus 5 characters, and have their own token, separate from any device token.",
           "name": "Security Alert",
-          "token": "YOUR_API_TOKEN_HERE",
-          "id": "GRPFAMILY",
-          "groupType": "all",
+          "token": "YOUR_GROUP_TOKEN_HERE",
+          "id": "GRP56789",
           "text": "Security system has been triggered!",
-          "title": "⚠️ SECURITY ALERT"
+          "title": "SECURITY ALERT",
+          "groupType": "security",
+          "timeSensitive": true
         },
         {
-          "_comment": "Simple reminder notification",
+          "_comment": "Time sensitive alert. Breaks through Focus and Do Not Disturb, so reserve it for real emergencies.",
+          "name": "Water Leak",
+          "token": "YOUR_API_TOKEN_HERE",
+          "id": "YOUR_DEVICE_ID",
+          "text": "Water detected under the kitchen sink",
+          "title": "Leak Detected",
+          "timeSensitive": true
+        },
+        {
+          "_comment": "Threading. These two share a thread ID, so they collapse into one thread instead of stacking up.",
           "name": "Bedtime Reminder",
           "token": "YOUR_API_TOKEN_HERE",
-          "id": "bedroom_device",
-          "text": "It's 10 PM - Time to get ready for bed",
-          "title": "🛏️ Bedtime"
+          "id": "YOUR_DEVICE_ID",
+          "text": "It's 10 PM, time to get ready for bed",
+          "title": "Bedtime",
+          "groupType": "household-routines"
         },
         {
-          "_comment": "Weather alert to any available device in group (note GRP prefix)",
-          "name": "Weather Warning",
-          "token": "YOUR_API_TOKEN_HERE",
-          "id": "GRPHOUSEHOLD",
-          "groupType": "any",
-          "text": "Severe weather warning in your area",
-          "title": "⛈️ Weather Alert",
-          "iconURL": "https://notifyicons.pingie.com/weather-warning.png"
+          "_comment": "Web device. Browser IDs start with WB and work on every endpoint just like a phone.",
+          "name": "Desk Browser Ping",
+          "token": "YOUR_WEB_DEVICE_TOKEN",
+          "id": "WB01234567890123",
+          "text": "Laundry is done",
+          "groupType": "household-routines"
         }
       ]
     }
